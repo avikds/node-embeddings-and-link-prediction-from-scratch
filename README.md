@@ -34,6 +34,7 @@ python scaffold.py
 - [x] **22.** inductive_evaluation
 - [x] **23.** synthetic_kg
 - [x] **24.** TransE
+- [x] **25.** corrupt_triples
 
 ---
 

@@ -1462,3 +1462,77 @@ class TransE(nn.Module):
 
         return loss.mean()
 
+# Step 25 - corrupt_triples
+def corrupt_triples(triples, n_entities, generator, true_set=None):
+    # Start from an exact clone so the input tensor is not modified.
+    corrupted = triples.clone()
+
+    m = triples.shape[0]
+
+    if m == 0:
+        return corrupted
+
+    # Decide independently for every row whether to corrupt the head
+    # or the tail. rand < 0.5 means head corruption.
+    corrupt_head = torch.rand(
+        m,
+        generator=generator,
+    ) < 0.5
+
+    # Draw one replacement entity for every row.
+    replacements = torch.randint(
+        0,
+        n_entities,
+        (m,),
+        generator=generator,
+    )
+
+    # Apply the replacements while leaving the relation column unchanged.
+    corrupted[corrupt_head, 0] = replacements[corrupt_head]
+    corrupted[~corrupt_head, 2] = replacements[~corrupt_head]
+
+    # When a true-triple set is supplied, redraw only rows that still
+    # correspond to true triples, for at most 100 rounds.
+    if true_set is not None:
+        for _ in range(100):
+            offending = torch.tensor(
+                [
+                    tuple(triple.tolist()) in true_set
+                    for triple in corrupted
+                ],
+                dtype=torch.bool,
+                device=corrupted.device,
+            )
+
+            if not offending.any():
+                break
+
+            offending_indices = torch.nonzero(
+                offending,
+                as_tuple=False,
+            ).squeeze(1)
+
+            # Fresh replacement draws only for offending rows.
+            redraws = torch.randint(
+                0,
+                n_entities,
+                (offending_indices.numel(),),
+                generator=generator,
+                device=corrupted.device,
+            )
+
+            head_offending = corrupt_head[offending_indices]
+            tail_offending = ~head_offending
+
+            corrupted[
+                offending_indices[head_offending],
+                0,
+            ] = redraws[head_offending]
+
+            corrupted[
+                offending_indices[tail_offending],
+                2,
+            ] = redraws[tail_offending]
+
+    return corrupted
+
