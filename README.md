@@ -39,6 +39,22 @@ python scaffold.py
 - [x] **27.** filtered_rank
 - [x] **28.** link_prediction_report
 
----
+## Results
 
-Built on Deep-ML.
+```
+1. Embeddings from walks
+   karate club: agreement=0.9706 random=0.3529
+   The skip-gram objective never saw a label; the geometry alone separates the two factions.
+
+2. Link prediction, honest and leaked
+   leakage: honest_auc=0.7646 leaked_auc=0.8526 honest_mrr=0.0513 leaked_mrr=0.0748
+   Same model, same test edges, same negatives. One changed line and the score is a memory, not a prediction.
+
+3. Inductive versus transductive
+   inductive: sage_auc=0.8174 skipgram_auc=0.5135 new_nodes=24
+   The encoder computes an embedding from features and neighbours; the table has an untrained row for every new node.
+
+4. Knowledge graph completion
+   TransE: before_mrr=0.0749 before_hits@10=0.1646 after_mrr=0.5245 after_hits@10=0.8924
+   Relations as translations: on a graph generated from that assumption, training moves the true answer into the top ten for most held-out facts.
+```
