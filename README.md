@@ -36,6 +36,7 @@ python scaffold.py
 - [x] **24.** TransE
 - [x] **25.** corrupt_triples
 - [x] **26.** train_transe
+- [x] **27.** filtered_rank
 
 ---
 

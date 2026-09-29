@@ -1621,3 +1621,144 @@ def train_transe(
 
     return epoch_losses
 
+# Step 27 - filtered_rank
+def filtered_rank(model, triple, true_set, n_entities, mode):
+    # Normalize the triple into Python integers for membership checks.
+    h = int(triple[0])
+    r = int(triple[1])
+    t = int(triple[2])
+
+    if mode == "tail":
+        # Candidate triples: (h, r, e) for every possible tail entity.
+        candidates = torch.stack(
+            [
+                torch.full(
+                    (n_entities,),
+                    h,
+                    dtype=torch.long,
+                ),
+                torch.full(
+                    (n_entities,),
+                    r,
+                    dtype=torch.long,
+                ),
+                torch.arange(
+                    n_entities,
+                    dtype=torch.long,
+                ),
+            ],
+            dim=1,
+        )
+
+        true_entity = t
+
+    elif mode == "head":
+        # Candidate triples: (e, r, t) for every possible head entity.
+        candidates = torch.stack(
+            [
+                torch.arange(
+                    n_entities,
+                    dtype=torch.long,
+                ),
+                torch.full(
+                    (n_entities,),
+                    r,
+                    dtype=torch.long,
+                ),
+                torch.full(
+                    (n_entities,),
+                    t,
+                    dtype=torch.long,
+                ),
+            ],
+            dim=1,
+        )
+
+        true_entity = h
+
+    else:
+        raise ValueError("mode must be either 'tail' or 'head'")
+
+    # Put candidates on the same device as the model parameters.
+    device = model.ent.weight.device
+    candidates = candidates.to(device)
+
+    with torch.no_grad():
+        distances = model.distance(candidates)
+
+    # Filter every other candidate that is itself a known true triple.
+    # The target triple must remain unfiltered.
+    for entity in range(n_entities):
+        if entity == true_entity:
+            continue
+
+        if mode == "tail":
+            candidate = (h, r, entity)
+        else:
+            candidate = (entity, r, t)
+
+        if candidate in true_set:
+            distances[entity] = float("inf")
+
+    true_distance = distances[true_entity]
+
+    # Rank is one plus the number of candidates strictly closer
+    # than the true entity.
+    return int((distances < true_distance).sum().item()) + 1
+
+
+def kg_ranking_metrics(model, test_triples, all_triples, n_entities):
+    # All known triples are used for filtering.
+    true_set = {
+        tuple(triple.tolist())
+        for triple in all_triples
+    }
+
+    tail_ranks = []
+    head_ranks = []
+
+    # Collect both tail and head ranks for every test triple.
+    for triple in test_triples:
+        tail_ranks.append(
+            filtered_rank(
+                model,
+                triple,
+                true_set,
+                n_entities,
+                "tail",
+            )
+        )
+
+        head_ranks.append(
+            filtered_rank(
+                model,
+                triple,
+                true_set,
+                n_entities,
+                "head",
+            )
+        )
+
+    ranks = tail_ranks + head_ranks
+
+    # The normal evaluation setup contains at least one test triple.
+    if not ranks:
+        return {
+            "mrr": 0.0,
+            "hits@1": 0.0,
+            "hits@10": 0.0,
+            "mean_rank": 0.0,
+        }
+
+    ranks_tensor = torch.tensor(
+        ranks,
+        dtype=torch.float32,
+    )
+
+    return {
+        "mrr": float((1.0 / ranks_tensor).mean()),
+        "hits@1": float((ranks_tensor <= 1).float().mean()),
+        "hits@10": float((ranks_tensor <= 10).float().mean()),
+        "mean_rank": float(ranks_tensor.mean()),
+    }
+
