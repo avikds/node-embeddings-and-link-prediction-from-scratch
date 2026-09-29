@@ -1394,3 +1394,71 @@ def split_triples(triples, test_frac, seed):
 
     return train, test
 
+# Step 24 - TransE
+import math
+
+class TransE(nn.Module):
+    def __init__(self, n_entities, n_relations, dim, seed=0, p_norm=2):
+        super().__init__()
+
+        # Make initialization deterministic.
+        torch.manual_seed(seed)
+
+        # TransE initialization range.
+        limit = 6.0 / math.sqrt(dim)
+
+        self.ent = nn.Embedding(n_entities, dim)
+        self.rel = nn.Embedding(n_relations, dim)
+
+        with torch.no_grad():
+            self.ent.weight.uniform_(-limit, limit)
+            self.rel.weight.uniform_(-limit, limit)
+
+        self.p_norm = p_norm
+
+        # Normalize entity embeddings to unit L2 norm.
+        self.normalize_entities()
+
+    def normalize_entities(self):
+        # Entity normalization is performed in-place without tracking
+        # gradients, as required.
+        with torch.no_grad():
+            norms = self.ent.weight.norm(
+                p=2,
+                dim=1,
+                keepdim=True,
+            )
+
+            # Avoid division by zero in the unlikely event of a zero row.
+            norms = norms.clamp_min(torch.finfo(self.ent.weight.dtype).eps)
+
+            self.ent.weight.div_(norms)
+
+    def distance(self, triples):
+        # Look up the head, relation, and tail embeddings.
+        head = self.ent(triples[:, 0])
+        relation = self.rel(triples[:, 1])
+        tail = self.ent(triples[:, 2])
+
+        # TransE score uses the distance ||e_h + r - e_t||.
+        return torch.linalg.vector_norm(
+            head + relation - tail,
+            ord=self.p_norm,
+            dim=1,
+        )
+
+    def score(self, triples):
+        # Higher scores indicate smaller TransE distances.
+        return -self.distance(triples)
+
+    def forward(self, pos, neg, margin):
+        # Margin-ranking objective:
+        # max(0, margin + d(pos) - d(neg)).
+        loss = torch.relu(
+            margin
+            + self.distance(pos)
+            - self.distance(neg)
+        )
+
+        return loss.mean()
+
