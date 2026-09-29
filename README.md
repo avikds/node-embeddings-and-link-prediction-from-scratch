@@ -14,6 +14,7 @@ python scaffold.py
 - [x] **2.** build_adjacency_lists
 - [x] **3.** sbm_graph
 - [x] **4.** edge_split
+- [x] **5.** sample_negative_edges
 
 ---
 

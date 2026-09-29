@@ -208,3 +208,48 @@ def edge_split(edge_index, n, val_frac, test_frac, seed):
         "num_nodes": n,
     }
 
+# Step 5 - sample_negative_edges
+import random
+
+
+def sample_negative_edges(edge_index, n, num, seed, exclude=None):
+    # Existing graph edges are stored as canonical undirected pairs.
+    edge_set = undirected_edge_set(edge_index)
+
+    # Optionally exclude another collection of edges as well.
+    exclude_set = undirected_edge_set(exclude) if exclude is not None else set()
+
+    # Use Python's random.Random exactly as specified.
+    rng = random.Random(seed)
+
+    sampled = []
+    sampled_set = set()
+
+    # Rejection sampling until the requested number of negatives is found.
+    while len(sampled) < num:
+        u = rng.randrange(n)
+        v = rng.randrange(n)
+
+        # Ignore self-loops.
+        if u == v:
+            continue
+
+        pair = (min(u, v), max(u, v))
+
+        # Reject existing edges, excluded edges, and duplicate samples.
+        if pair in edge_set:
+            continue
+        if pair in exclude_set:
+            continue
+        if pair in sampled_set:
+            continue
+
+        sampled.append(pair)
+        sampled_set.add(pair)
+
+    # Return the pairs in the order in which they were sampled.
+    if num == 0:
+        return torch.empty((2, 0), dtype=torch.long)
+
+    return torch.tensor(sampled, dtype=torch.long).t().contiguous()
+
