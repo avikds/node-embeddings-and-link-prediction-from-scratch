@@ -99,3 +99,61 @@ def degree_vector(adj):
     # The degree of each node is simply the length of its neighbour list.
     return torch.tensor([len(neighbours) for neighbours in adj], dtype=torch.long)
 
+# Step 3 - sbm_graph
+def sbm_graph(sizes, p_in, p_out, seed):
+    # Assign each node to a block. Nodes are ordered block-by-block.
+    blocks = torch.repeat_interleave(
+        torch.arange(len(sizes), dtype=torch.long),
+        torch.tensor(sizes, dtype=torch.long),
+    )
+
+    n = int(blocks.numel())
+
+    # Use one generator and one n x n uniform draw, as required.
+    g = torch.Generator().manual_seed(seed)
+    rand = torch.rand((n, n), generator=g)
+
+    # Probability of an edge depends on whether the two nodes
+    # belong to the same block.
+    same_block = blocks.unsqueeze(0) == blocks.unsqueeze(1)
+    probabilities = torch.where(
+        same_block,
+        torch.tensor(p_in, dtype=rand.dtype),
+        torch.tensor(p_out, dtype=rand.dtype),
+    )
+
+    # Keep only sampled edges in the strict upper triangle.
+    upper_triangle = torch.triu(torch.ones((n, n), dtype=torch.bool), diagonal=1)
+    sampled = upper_triangle & (rand < probabilities)
+
+    # Extract all (u, v) pairs with u < v in row-major order.
+    u, v = torch.nonzero(sampled, as_tuple=True)
+
+    forward_edges = torch.stack([u, v], dim=0)
+    reverse_edges = torch.stack([v, u], dim=0)
+
+    # All upper-triangle edges first, followed by all reverses.
+    edge_index = torch.cat([forward_edges, reverse_edges], dim=1)
+
+    return edge_index, blocks
+
+
+def sbm_features(blocks, dim, noise, seed):
+    n = int(blocks.numel())
+    num_blocks = int(blocks.max().item()) + 1 if n > 0 else 0
+
+    # A fresh generator is used for the feature generation.
+    g = torch.Generator().manual_seed(seed)
+
+    # Draw one centroid for every block.
+    centroids = torch.randn((num_blocks, dim), generator=g)
+
+    # Draw one independent standard-normal noise vector per node
+    # using the same generator.
+    node_noise = torch.randn((n, dim), generator=g)
+
+    # Each node is centered at the centroid of its block.
+    features = centroids[blocks] + noise * node_noise
+
+    return features
+

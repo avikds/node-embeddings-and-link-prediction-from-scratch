@@ -12,6 +12,7 @@ python scaffold.py
 
 - [x] **1.** karate_club_graph
 - [x] **2.** build_adjacency_lists
+- [x] **3.** sbm_graph
 
 ---
 
