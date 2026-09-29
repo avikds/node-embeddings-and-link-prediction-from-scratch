@@ -690,3 +690,33 @@ def link_margin_loss(pos, neg, margin):
 
     return losses.mean()
 
+# Step 15 - evaluate_link_prediction
+def evaluate_link_prediction(score_fn, split, num_neg, seed):
+    # Combine validation and test positives so neither can ever be
+    # sampled as a negative edge.
+    excluded = torch.cat(
+        [split["val_pos"], split["test_pos"]],
+        dim=1,
+    )
+
+    # Sample negative edges only from non-edges of the training graph,
+    # while also excluding validation and test positives.
+    neg_pairs = sample_negative_edges(
+        split["train_edge_index"],
+        split["num_nodes"],
+        num_neg,
+        seed=seed,
+        exclude=excluded,
+    )
+
+    # Score the held-out test positives and sampled negatives.
+    pos_scores = score_fn(split["test_pos"])
+    neg_scores = score_fn(neg_pairs)
+
+    # Evaluate the ranking quality of the predictions.
+    return {
+        "auc": roc_auc(pos_scores, neg_scores),
+        "hits@10": hits_at_k(pos_scores, neg_scores, 10),
+        "mrr": mean_reciprocal_rank(pos_scores, neg_scores),
+    }
+

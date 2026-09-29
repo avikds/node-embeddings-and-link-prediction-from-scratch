@@ -24,6 +24,7 @@ python scaffold.py
 - [x] **12.** dot_decoder
 - [x] **13.** roc_auc
 - [x] **14.** link_bce_loss
+- [x] **15.** evaluate_link_prediction
 
 ---
 
