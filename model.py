@@ -519,3 +519,83 @@ def train_skipgram(model, pairs, neg_probs, k, epochs, batch_size, lr, seed):
 
     return epoch_losses
 
+# Step 11 - knn_label_agreement
+def knn_label_agreement(Z, labels, k):
+    # Normalize every embedding vector so that the dot product
+    # becomes cosine similarity.
+    Z_normalized = F.normalize(Z, p=2, dim=1)
+
+    # Compute the full pairwise cosine-similarity matrix.
+    similarities = Z_normalized @ Z_normalized.t()
+
+    # A node must not be included in its own neighbourhood.
+    similarities.fill_diagonal_(-float("inf"))
+
+    # Select the k most similar nodes for every node.
+    neighbours = similarities.topk(k, dim=1).indices
+
+    # Get the labels of the k nearest neighbours.
+    neighbour_labels = labels[neighbours]
+
+    # Majority vote among the k neighbours.
+    majority_labels = torch.mode(neighbour_labels, dim=1).values
+
+    # Fraction of nodes whose predicted majority label matches
+    # their own ground-truth label.
+    return float((majority_labels == labels).float().mean())
+
+
+def embed_karate_club(
+    dim=16,
+    walk_length=10,
+    walks_per_node=20,
+    window=3,
+    k=5,
+    epochs=5,
+    seed=0,
+):
+    # Load the Karate Club graph and its faction labels.
+    edge_index, labels = karate_club_graph()
+
+    # Build the undirected adjacency lists required for random walks.
+    adj = build_adjacency_lists(edge_index, 34)
+
+    # Generate the DeepWalk corpus using uniform random walks.
+    walks = uniform_random_walks(
+        adj,
+        walk_length,
+        walks_per_node,
+        seed,
+    )
+
+    # Convert walks into center-context skip-gram pairs.
+    pairs = skipgram_pairs(walks, window)
+
+    # Build the 0.75-power negative-sampling distribution.
+    neg_probs = negative_sampling_distribution(
+        walks,
+        34,
+        power=0.75,
+    )
+
+    # Create the skip-gram model using the requested seed.
+    model = SkipGramModel(34, dim, seed=seed)
+
+    # Train with 5 negative samples per positive pair,
+    # batch size 256, learning rate 0.01, and the requested seed.
+    losses = train_skipgram(
+        model,
+        pairs,
+        neg_probs,
+        k=5,
+        epochs=epochs,
+        batch_size=256,
+        lr=0.01,
+        seed=seed,
+    )
+
+    # The project uses the input embedding vectors as node embeddings.
+    Z = model.embeddings()
+
+    return Z, labels, losses
+

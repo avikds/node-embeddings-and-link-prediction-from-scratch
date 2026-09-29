@@ -20,6 +20,7 @@ python scaffold.py
 - [x] **8.** skipgram_pairs
 - [x] **9.** SkipGramModel
 - [x] **10.** train_skipgram
+- [x] **11.** knn_label_agreement
 
 ---
 
