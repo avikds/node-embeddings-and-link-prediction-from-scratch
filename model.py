@@ -599,3 +599,31 @@ def embed_karate_club(
 
     return Z, labels, losses
 
+# Step 12 - dot_decoder
+def dot_decoder(Z, pairs):
+    # Select the embedding vectors for the two endpoints of each pair.
+    z_u = Z[pairs[0]]
+    z_v = Z[pairs[1]]
+
+    # Compute one dot product per pair.
+    return (z_u * z_v).sum(dim=1)
+
+
+def cosine_decoder(Z, pairs):
+    # Normalize the node embeddings so their dot products are
+    # cosine similarities.
+    Z_normalized = F.normalize(Z, p=2, dim=1)
+
+    z_u = Z_normalized[pairs[0]]
+    z_v = Z_normalized[pairs[1]]
+
+    return (z_u * z_v).sum(dim=1)
+
+
+def hadamard_features(Z, pairs):
+    # Elementwise product of the two endpoint embeddings.
+    z_u = Z[pairs[0]]
+    z_v = Z[pairs[1]]
+
+    return z_u * z_v
+
