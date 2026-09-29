@@ -35,6 +35,7 @@ python scaffold.py
 - [x] **23.** synthetic_kg
 - [x] **24.** TransE
 - [x] **25.** corrupt_triples
+- [x] **26.** train_transe
 
 ---
 

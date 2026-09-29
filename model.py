@@ -1536,3 +1536,88 @@ def corrupt_triples(triples, n_entities, generator, true_set=None):
 
     return corrupted
 
+# Step 26 - train_transe
+def train_transe(
+    model,
+    triples,
+    n_entities,
+    epochs,
+    batch_size,
+    lr,
+    margin,
+    seed,
+):
+    # Store all known true triples for filtered corruption.
+    true_set = {
+        tuple(triple.tolist())
+        for triple in triples
+    }
+
+    # Generator shared across epoch shuffling and triple corruption.
+    g = torch.Generator().manual_seed(seed)
+
+    # Adam optimizer.
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=lr,
+    )
+
+    m = triples.shape[0]
+    epoch_losses = []
+
+    model.train()
+
+    for _ in range(epochs):
+        # Shuffle triple rows using the shared generator.
+        perm = torch.randperm(
+            m,
+            generator=g,
+        )
+
+        total_loss = 0.0
+        total_examples = 0
+
+        # Process shuffled triples in consecutive batches.
+        for start in range(0, m, batch_size):
+            batch_indices = perm[start:start + batch_size]
+            batch = triples[batch_indices]
+
+            # Create filtered corrupted negatives.
+            corrupted = corrupt_triples(
+                batch,
+                n_entities,
+                g,
+                true_set=true_set,
+            )
+
+            optimizer.zero_grad()
+
+            # TransE margin-ranking loss.
+            loss = model(
+                batch,
+                corrupted,
+                margin,
+            )
+
+            loss.backward()
+            optimizer.step()
+
+            # Keep entity embeddings on the unit sphere after every step.
+            model.normalize_entities()
+
+            batch_n = batch.shape[0]
+
+            # Weight batch losses by their number of examples.
+            total_loss += float(loss.detach()) * batch_n
+            total_examples += batch_n
+
+        # Return a well-defined value even for an empty triple tensor.
+        if total_examples == 0:
+            epoch_losses.append(0.0)
+        else:
+            epoch_losses.append(
+                total_loss / total_examples
+            )
+
+    return epoch_losses
+
