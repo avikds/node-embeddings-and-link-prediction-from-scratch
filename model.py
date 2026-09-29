@@ -157,3 +157,54 @@ def sbm_features(blocks, dim, noise, seed):
 
     return features
 
+# Step 4 - edge_split
+def edge_split(edge_index, n, val_frac, test_frac, seed):
+    # Get unique undirected edges and sort them for deterministic ordering
+    # before applying the seeded shuffle.
+    undirected_edges = sorted(undirected_edge_set(edge_index))
+
+    m = len(undirected_edges)
+
+    # Shuffle the edge indices using the specified seed.
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(m, generator=g)
+
+    # Number of validation and test edges.
+    m_val = round(val_frac * m)
+    m_test = round(test_frac * m)
+
+    # The first shuffled edges go to validation, the next ones to test,
+    # and the remaining edges are used for training.
+    val_indices = perm[:m_val]
+    test_indices = perm[m_val:m_val + m_test]
+    train_indices = perm[m_val + m_test:]
+
+    def make_pos_edges(indices):
+        # Always return a long tensor of shape (2, number_of_edges),
+        # including when the set is empty.
+        if indices.numel() == 0:
+            return torch.empty((2, 0), dtype=torch.long)
+
+        edges = torch.tensor(
+            [undirected_edges[i] for i in indices.tolist()],
+            dtype=torch.long,
+        )
+
+        return edges.t().contiguous()
+
+    train_pos = make_pos_edges(train_indices)
+    val_pos = make_pos_edges(val_indices)
+    test_pos = make_pos_edges(test_indices)
+
+    # Build the training graph with both directions of every training edge.
+    train_reverse = train_pos[[1, 0], :]
+    train_edge_index = torch.cat([train_pos, train_reverse], dim=1)
+
+    return {
+        "train_pos": train_pos,
+        "train_edge_index": train_edge_index,
+        "val_pos": val_pos,
+        "test_pos": test_pos,
+        "num_nodes": n,
+    }
+
