@@ -11,6 +11,7 @@ python scaffold.py
 ## Steps
 
 - [x] **1.** karate_club_graph
+- [x] **2.** build_adjacency_lists
 
 ---
 

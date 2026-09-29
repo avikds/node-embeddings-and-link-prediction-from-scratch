@@ -75,3 +75,27 @@ def undirected_edge_set(edge_index):
 
     return edges
 
+# Step 2 - build_adjacency_lists
+def build_adjacency_lists(edge_index, n):
+    # Use sets temporarily so duplicate edges are removed automatically.
+    neighbours = [set() for _ in range(n)]
+
+    for u, v in edge_index.t().tolist():
+        # Ignore self-loops.
+        if u == v:
+            continue
+
+        # Treat every edge as undirected.
+        neighbours[u].add(v)
+        neighbours[v].add(u)
+
+    # Convert each set into a sorted list.
+    adj = [sorted(node_neighbours) for node_neighbours in neighbours]
+
+    return adj
+
+
+def degree_vector(adj):
+    # The degree of each node is simply the length of its neighbour list.
+    return torch.tensor([len(neighbours) for neighbours in adj], dtype=torch.long)
+
