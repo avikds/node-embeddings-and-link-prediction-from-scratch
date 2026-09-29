@@ -658,3 +658,35 @@ def mean_reciprocal_rank(pos, neg):
     # Mean reciprocal rank.
     return float((1.0 / ranks.float()).mean())
 
+# Step 14 - link_bce_loss
+def link_bce_loss(pos, neg):
+    # Positive edges are targets of 1.
+    pos_targets = torch.ones_like(pos)
+
+    # Negative edges are targets of 0.
+    neg_targets = torch.zeros_like(neg)
+
+    # Compute BCE-with-logits separately for positive and negative
+    # scores, then add the two mean losses.
+    pos_loss = F.binary_cross_entropy_with_logits(
+        pos,
+        pos_targets,
+    )
+
+    neg_loss = F.binary_cross_entropy_with_logits(
+        neg,
+        neg_targets,
+    )
+
+    return pos_loss + neg_loss
+
+
+def link_margin_loss(pos, neg, margin):
+    # Compare every positive score against every negative score.
+    # Each pair contributes max(0, margin - pos + neg).
+    losses = torch.relu(
+        margin - pos.unsqueeze(1) + neg.unsqueeze(0)
+    )
+
+    return losses.mean()
+
