@@ -351,3 +351,62 @@ def node2vec_walks(adj, walk_length, walks_per_node, p, q, seed):
 
     return torch.tensor(walks, dtype=torch.long)
 
+# Step 8 - skipgram_pairs
+def skipgram_pairs(walks, window):
+    pairs = []
+
+    # Process walks in their existing order.
+    for walk in walks.tolist():
+        walk_length = len(walk)
+
+        # For each position, generate context positions in increasing
+        # position order within the specified window.
+        for i in range(walk_length):
+            center = walk[i]
+
+            start = max(0, i - window)
+            end = min(walk_length, i + window + 1)
+
+            for j in range(start, end):
+                # Exclude the center position itself and contexts whose
+                # node is identical to the center node.
+                if j == i or walk[j] == center:
+                    continue
+
+                pairs.append((center, walk[j]))
+
+    # Always return a long tensor with shape (2, P), including (2, 0).
+    if not pairs:
+        return torch.empty((2, 0), dtype=torch.long)
+
+    return torch.tensor(pairs, dtype=torch.long).t().contiguous()
+
+
+def negative_sampling_distribution(walks, n, power=0.75):
+    # Count how many times each node appears across all walks.
+    counts = torch.bincount(
+        walks.reshape(-1),
+        minlength=n,
+    ).to(dtype=torch.float32)
+
+    # Raise visit counts to the requested power.
+    weights = counts.pow(power)
+
+    # Normalize into a probability distribution.
+    total = weights.sum()
+
+    if total == 0:
+        return torch.zeros(n, dtype=torch.float32)
+
+    return weights / total
+
+
+def sample_negatives(probs, num_pairs, k, generator):
+    # Draw k negative node IDs independently for every positive pair.
+    return torch.multinomial(
+        probs,
+        num_pairs * k,
+        replacement=True,
+        generator=generator,
+    ).reshape(num_pairs, k)
+
