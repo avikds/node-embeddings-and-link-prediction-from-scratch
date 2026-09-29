@@ -410,3 +410,55 @@ def sample_negatives(probs, num_pairs, k, generator):
         generator=generator,
     ).reshape(num_pairs, k)
 
+# Step 9 - SkipGramModel
+class SkipGramModel(nn.Module):
+    def __init__(self, n, dim, seed=0):
+        super().__init__()
+
+        # Make parameter initialization deterministic under the given seed.
+        torch.manual_seed(seed)
+
+        self.in_embed = nn.Embedding(n, dim)
+        self.out_embed = nn.Embedding(n, dim)
+
+        # Word2Vec-style initialization for the input embeddings.
+        with torch.no_grad():
+            self.in_embed.weight.uniform_(
+                -0.5 / dim,
+                0.5 / dim
+            )
+
+            # Output embeddings start at zero.
+            self.out_embed.weight.zero_()
+
+    def forward(self, center, context, negatives):
+        # Input embeddings for the center nodes: (B, D)
+        v_center = self.in_embed(center)
+
+        # Output embeddings for the positive context nodes: (B, D)
+        u_context = self.out_embed(context)
+
+        # Positive scores: u_o^T v_c -> (B,)
+        positive_scores = (u_context * v_center).sum(dim=1)
+
+        # Output embeddings for negative samples: (B, K, D)
+        u_negative = self.out_embed(negatives)
+
+        # Negative scores: u_k^T v_c -> (B, K)
+        negative_scores = (
+            u_negative * v_center.unsqueeze(1)
+        ).sum(dim=2)
+
+        # Skip-gram negative-sampling objective:
+        # -log(sigmoid(u_o^T v_c))
+        # -sum_k log(sigmoid(-u_k^T v_c))
+        positive_loss = -F.logsigmoid(positive_scores)
+        negative_loss = -F.logsigmoid(-negative_scores).sum(dim=1)
+
+        # Mean loss over the batch.
+        return (positive_loss + negative_loss).mean()
+
+    def embeddings(self):
+        # Return detached copies of the input embeddings used by the project.
+        return self.in_embed.weight.detach().clone()
+
