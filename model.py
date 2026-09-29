@@ -844,3 +844,29 @@ def leakage_experiment(sizes, p_in, p_out, seed, **kwargs):
         "leaked_mrr": leaked_metrics["mrr"],
     }
 
+# Step 18 - sample_neighbors
+def sample_neighbors(adj, nodes, num_samples, rng):
+    samples = []
+
+    # Process each requested node independently.
+    for node in nodes.tolist():
+        neighbours = adj[node]
+
+        if neighbours:
+            # Sample with replacement by repeatedly using rng.choice.
+            node_samples = [
+                rng.choice(neighbours)
+                for _ in range(num_samples)
+            ]
+        else:
+            # Isolated nodes repeat themselves.
+            node_samples = [node] * num_samples
+
+        samples.append(node_samples)
+
+    # Preserve the required shape even when nodes or num_samples is zero.
+    return torch.tensor(
+        samples,
+        dtype=torch.long,
+    ).reshape(len(nodes), num_samples)
+

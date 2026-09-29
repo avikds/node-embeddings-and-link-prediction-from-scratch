@@ -27,6 +27,7 @@ python scaffold.py
 - [x] **15.** evaluate_link_prediction
 - [x] **16.** embedding_link_prediction
 - [x] **17.** leakage_experiment
+- [x] **18.** sample_neighbors
 
 ---
 
