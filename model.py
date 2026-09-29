@@ -1762,3 +1762,149 @@ def kg_ranking_metrics(model, test_triples, all_triples, n_entities):
         "mean_rank": float(ranks_tensor.mean()),
     }
 
+# Step 28 - link_prediction_report
+def link_prediction_report(
+    sizes=(40, 40, 40),
+    p_in=0.25,
+    p_out=0.02,
+    seed=0,
+    kg_entities=60,
+    kg_relations=8,
+    sage_steps=150,
+    kg_epochs=100,
+):
+    # ------------------------------------------------------------
+    # 1. Karate Club: learned embeddings vs random embeddings
+    # ------------------------------------------------------------
+    Z, labels, _ = embed_karate_club(seed=seed)
+
+    karate_agreement = knn_label_agreement(
+        Z,
+        labels,
+        5,
+    )
+
+    # Generate the random baseline under the requested seed.
+    torch.manual_seed(seed)
+
+    random_Z = torch.randn(
+        34,
+        16,
+    )
+
+    random_agreement = knn_label_agreement(
+        random_Z,
+        labels,
+        5,
+    )
+
+    karate_line = (
+        f"karate club: agreement={karate_agreement:.4f} "
+        f"random={random_agreement:.4f}"
+    )
+
+    # ------------------------------------------------------------
+    # 2. Leakage experiment
+    # ------------------------------------------------------------
+    leakage = leakage_experiment(
+        list(sizes),
+        p_in,
+        p_out,
+        seed,
+    )
+
+    leakage_line = (
+        f"leakage: honest_auc={leakage['honest_auc']:.4f} "
+        f"leaked_auc={leakage['leaked_auc']:.4f} "
+        f"honest_mrr={leakage['honest_mrr']:.4f} "
+        f"leaked_mrr={leakage['leaked_mrr']:.4f}"
+    )
+
+    # ------------------------------------------------------------
+    # 3. Inductive evaluation
+    # ------------------------------------------------------------
+    inductive = inductive_evaluation(
+        list(sizes),
+        p_in,
+        p_out,
+        8,
+        0.5,
+        0.2,
+        seed,
+        steps=sage_steps,
+    )
+
+    # Keep the node count as an integer because it is a count rather
+    # than a probability/metric and the report test expects all
+    # decimal numbers to lie in [0, 1].
+    inductive_line = (
+        f"inductive: sage_auc={inductive['sage_auc']:.4f} "
+        f"skipgram_auc={inductive['skipgram_auc']:.4f} "
+        f"new_nodes={inductive['n_new_nodes']}"
+    )
+
+    # ------------------------------------------------------------
+    # 4. Knowledge graph: TransE before and after training
+    # ------------------------------------------------------------
+    triples = synthetic_kg(
+        kg_entities,
+        kg_relations,
+        2,
+        seed,
+    )
+
+    train, test = split_triples(
+        triples,
+        0.2,
+        seed,
+    )
+
+    model = TransE(
+        kg_entities,
+        kg_relations,
+        16,
+        seed=seed,
+    )
+
+    # Metrics before training.
+    before = kg_ranking_metrics(
+        model,
+        test,
+        triples,
+        kg_entities,
+    )
+
+    # Train TransE.
+    train_transe(
+        model,
+        train,
+        kg_entities,
+        kg_epochs,
+        64,
+        0.02,
+        2.0,
+        seed,
+    )
+
+    # Metrics after training.
+    after = kg_ranking_metrics(
+        model,
+        test,
+        triples,
+        kg_entities,
+    )
+
+    transe_line = (
+        f"TransE: before_mrr={before['mrr']:.4f} "
+        f"before_hits@10={before['hits@10']:.4f} "
+        f"after_mrr={after['mrr']:.4f} "
+        f"after_hits@10={after['hits@10']:.4f}"
+    )
+
+    return [
+        karate_line,
+        leakage_line,
+        inductive_line,
+        transe_line,
+    ]
+

@@ -37,6 +37,7 @@ python scaffold.py
 - [x] **25.** corrupt_triples
 - [x] **26.** train_transe
 - [x] **27.** filtered_rank
+- [x] **28.** link_prediction_report
 
 ---
 
