@@ -281,3 +281,73 @@ def uniform_random_walks(adj, walk_length, walks_per_node, seed):
 
     return torch.tensor(walks, dtype=torch.long)
 
+# Step 7 - node2vec_walks
+def node2vec_transition_weights(adj, prev, cur, p, q):
+    weights = []
+
+    # Use a set for efficient membership checks when determining
+    # whether a candidate neighbour is also adjacent to `prev`.
+    prev_neighbours = set(adj[prev])
+
+    for neighbour in adj[cur]:
+        if neighbour == prev:
+            # Return to the previous node.
+            weights.append(1.0 / p)
+        elif neighbour in prev_neighbours:
+            # Move to a node connected to the previous node.
+            weights.append(1.0)
+        else:
+            # Move to a node that is not connected to the previous node.
+            weights.append(1.0 / q)
+
+    return weights
+
+
+def node2vec_walks(adj, walk_length, walks_per_node, p, q, seed):
+    rng = random.Random(seed)
+
+    n = len(adj)
+    walks = []
+
+    # Generate walks in the same order as uniform_random_walks:
+    # pass order first, then node index order.
+    for _ in range(walks_per_node):
+        for start_node in range(n):
+            walk = [start_node]
+            current_node = start_node
+            prev_node = None
+
+            while len(walk) < walk_length:
+                neighbours = adj[current_node]
+
+                if not neighbours:
+                    # At a dead end, repeat the current node.
+                    walk.append(current_node)
+                    continue
+
+                if prev_node is None:
+                    # The first step is unbiased.
+                    next_node = rng.choice(neighbours)
+                else:
+                    # Later steps use node2vec's biased transition weights.
+                    weights = node2vec_transition_weights(
+                        adj,
+                        prev_node,
+                        current_node,
+                        p,
+                        q,
+                    )
+                    next_node = rng.choices(
+                        neighbours,
+                        weights=weights,
+                        k=1,
+                    )[0]
+
+                prev_node = current_node
+                current_node = next_node
+                walk.append(current_node)
+
+            walks.append(walk)
+
+    return torch.tensor(walks, dtype=torch.long)
+

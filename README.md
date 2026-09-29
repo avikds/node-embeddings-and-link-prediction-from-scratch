@@ -16,6 +16,7 @@ python scaffold.py
 - [x] **4.** edge_split
 - [x] **5.** sample_negative_edges
 - [x] **6.** uniform_random_walks
+- [x] **7.** node2vec_walks
 
 ---
 
