@@ -720,3 +720,77 @@ def evaluate_link_prediction(score_fn, split, num_neg, seed):
         "mrr": mean_reciprocal_rank(pos_scores, neg_scores),
     }
 
+# Step 16 - embedding_link_prediction
+def embedding_link_prediction(
+    split,
+    dim=32,
+    walk_length=15,
+    walks_per_node=8,
+    window=4,
+    k=5,
+    epochs=3,
+    seed=0,
+    num_neg=500,
+):
+    num_nodes = split["num_nodes"]
+
+    # Build adjacency lists using only the training graph.
+    adj = build_adjacency_lists(
+        split["train_edge_index"],
+        num_nodes,
+    )
+
+    # Generate DeepWalk-style uniform random walks from the
+    # training graph only.
+    walks = uniform_random_walks(
+        adj,
+        walk_length,
+        walks_per_node,
+        seed=seed,
+    )
+
+    # Convert walks into skip-gram center-context pairs.
+    pairs = skipgram_pairs(
+        walks,
+        window,
+    )
+
+    # Build the negative-sampling distribution from the walk corpus.
+    neg_probs = negative_sampling_distribution(
+        walks,
+        num_nodes,
+        power=0.75,
+    )
+
+    # Train the skip-gram node embedding model.
+    model = SkipGramModel(
+        num_nodes,
+        dim,
+        seed=seed,
+    )
+
+    train_skipgram(
+        model,
+        pairs,
+        neg_probs,
+        k=k,
+        epochs=epochs,
+        batch_size=512,
+        lr=0.01,
+        seed=seed,
+    )
+
+    # The trained input embeddings are the node representations
+    # used by the link-prediction decoder.
+    Z = model.embeddings()
+
+    # Use dot-product scores to evaluate the held-out test edges.
+    metrics = evaluate_link_prediction(
+        lambda pairs: dot_decoder(Z, pairs),
+        split,
+        num_neg=num_neg,
+        seed=seed,
+    )
+
+    return Z, metrics
+
