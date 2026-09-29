@@ -252,3 +252,32 @@ def sample_negative_edges(edge_index, n, num, seed, exclude=None):
 
     return torch.tensor(sampled, dtype=torch.long).t().contiguous()
 
+# Step 6 - uniform_random_walks
+def uniform_random_walks(adj, walk_length, walks_per_node, seed):
+    rng = random.Random(seed)
+
+    n = len(adj)
+    walks = []
+
+    # Generate walks in pass order, then node index order.
+    for _ in range(walks_per_node):
+        for start_node in range(n):
+            walk = [start_node]
+            current_node = start_node
+
+            # Extend the walk until it reaches the requested length.
+            while len(walk) < walk_length:
+                neighbours = adj[current_node]
+
+                if neighbours:
+                    current_node = rng.choice(neighbours)
+                else:
+                    # At a dead end, repeat the current node.
+                    current_node = current_node
+
+                walk.append(current_node)
+
+            walks.append(walk)
+
+    return torch.tensor(walks, dtype=torch.long)
+
