@@ -627,3 +627,34 @@ def hadamard_features(Z, pairs):
 
     return z_u * z_v
 
+# Step 13 - roc_auc
+def roc_auc(pos, neg):
+    # Compare every positive score against every negative score.
+    comparisons = pos.unsqueeze(1) - neg.unsqueeze(0)
+
+    # A positive strictly above a negative contributes 1.
+    # A tie contributes 0.5.
+    scores = (
+        (comparisons > 0).float()
+        + 0.5 * (comparisons == 0).float()
+    )
+
+    return float(scores.mean())
+
+
+def hits_at_k(pos, neg, k):
+    # For each positive, rank is one plus the number of negatives
+    # with a strictly higher score.
+    ranks = 1 + (neg.unsqueeze(0) > pos.unsqueeze(1)).sum(dim=1)
+
+    # Fraction of positives whose rank is at most k.
+    return float((ranks <= k).float().mean())
+
+
+def mean_reciprocal_rank(pos, neg):
+    # Compute the rank of every positive against all negatives.
+    ranks = 1 + (neg.unsqueeze(0) > pos.unsqueeze(1)).sum(dim=1)
+
+    # Mean reciprocal rank.
+    return float((1.0 / ranks.float()).mean())
+

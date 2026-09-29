@@ -22,6 +22,7 @@ python scaffold.py
 - [x] **10.** train_skipgram
 - [x] **11.** knn_label_agreement
 - [x] **12.** dot_decoder
+- [x] **13.** roc_auc
 
 ---
 
