@@ -1108,3 +1108,210 @@ def train_sage_link_predictor(
 
     return losses
 
+# Step 22 - inductive_evaluation
+def inductive_evaluation(
+    sizes,
+    p_in,
+    p_out,
+    feat_dim,
+    noise,
+    new_frac,
+    seed,
+    steps=150,
+    num_samples=(5, 5),
+    num_neg=300,
+):
+    # Build the full SBM and generate node features.
+    edge_index, blocks = sbm_graph(
+        sizes,
+        p_in,
+        p_out,
+        seed=seed,
+    )
+
+    n = sum(sizes)
+
+    x = sbm_features(
+        blocks,
+        feat_dim,
+        noise,
+        seed + 1,
+    )
+
+    # Select the nodes that will be introduced only at evaluation time.
+    g = torch.Generator().manual_seed(seed)
+    new_count = round(new_frac * n)
+
+    new_nodes = torch.randperm(
+        n,
+        generator=g,
+    )[:new_count]
+
+    # Boolean mask identifying the new nodes.
+    is_new = torch.zeros(
+        n,
+        dtype=torch.bool,
+    )
+    is_new[new_nodes] = True
+
+    # Keep only edges whose two endpoints are old nodes.
+    old_mask = (
+        ~is_new[edge_index[0]]
+        & ~is_new[edge_index[1]]
+    )
+
+    # The remaining edges are the held-out edges touching at least
+    # one new node.
+    heldout_mask = ~old_mask
+
+    old_edges = edge_index[:, old_mask]
+    heldout_edges = edge_index[:, heldout_mask]
+
+    # Build the leakage-safe split for the old graph.
+    split_old = edge_split(
+        old_edges,
+        n,
+        0.0,
+        0.0,
+        seed=seed,
+    )
+
+    # ------------------------------------------------------------
+    # Inductive GraphSAGE model
+    # ------------------------------------------------------------
+    model = GraphSAGE(
+        feat_dim,
+        32,
+        32,
+        seed=seed,
+    )
+
+    train_sage_link_predictor(
+        model,
+        x,
+        split_old,
+        steps,
+        64,
+        0.01,
+        num_samples,
+        seed,
+    )
+
+    # At evaluation time, new nodes and their full-graph edges are
+    # available to the inductive encoder.
+    adj_full = build_adjacency_lists(
+        edge_index,
+        n,
+    )
+
+    sage_Z = sage_embed_all(
+        model,
+        x,
+        adj_full,
+        num_samples,
+        random.Random(seed),
+    )
+
+    # ------------------------------------------------------------
+    # Transductive Skip-Gram baseline
+    # ------------------------------------------------------------
+    skipgram_Z, _ = embedding_link_prediction(
+        split_old,
+        seed=seed,
+    )
+
+    # ------------------------------------------------------------
+    # Held-out positive edges
+    # ------------------------------------------------------------
+    # Convert every held-out directed edge into a canonical
+    # undirected (min, max) pair, remove duplicates, and sort.
+    test_pairs = sorted(
+        undirected_edge_set(heldout_edges)
+    )
+
+    if test_pairs:
+        test_pos = torch.tensor(
+            test_pairs,
+            dtype=torch.long,
+        ).t().contiguous()
+    else:
+        test_pos = torch.empty(
+            (2, 0),
+            dtype=torch.long,
+        )
+
+    # ------------------------------------------------------------
+    # Negative edges touching at least one new node
+    # ------------------------------------------------------------
+    full_edge_set = undirected_edge_set(edge_index)
+
+    new_nodes_list = new_nodes.tolist()
+    rng = random.Random(seed + 7)
+
+    negative_pairs = set()
+
+    while len(negative_pairs) < num_neg:
+        u = rng.choice(new_nodes_list)
+        v = rng.randrange(n)
+
+        if u == v:
+            continue
+
+        pair = (min(u, v), max(u, v))
+
+        # The pair must not be a real edge of the full graph and
+        # must not already have been sampled.
+        if pair in full_edge_set:
+            continue
+
+        if pair in negative_pairs:
+            continue
+
+        negative_pairs.add(pair)
+
+    negative_pairs = sorted(negative_pairs)
+
+    if negative_pairs:
+        neg = torch.tensor(
+            negative_pairs,
+            dtype=torch.long,
+        ).t().contiguous()
+    else:
+        neg = torch.empty(
+            (2, 0),
+            dtype=torch.long,
+        )
+
+    # Score exactly the same positive and negative pairs with both
+    # the inductive and transductive embeddings.
+    sage_pos_scores = dot_decoder(
+        sage_Z,
+        test_pos,
+    )
+    sage_neg_scores = dot_decoder(
+        sage_Z,
+        neg,
+    )
+
+    skipgram_pos_scores = dot_decoder(
+        skipgram_Z,
+        test_pos,
+    )
+    skipgram_neg_scores = dot_decoder(
+        skipgram_Z,
+        neg,
+    )
+
+    return {
+        "sage_auc": roc_auc(
+            sage_pos_scores,
+            sage_neg_scores,
+        ),
+        "skipgram_auc": roc_auc(
+            skipgram_pos_scores,
+            skipgram_neg_scores,
+        ),
+        "n_new_nodes": new_count,
+        "n_test_edges": test_pos.shape[1],
+    }
+
