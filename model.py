@@ -870,3 +870,33 @@ def sample_neighbors(adj, nodes, num_samples, rng):
         dtype=torch.long,
     ).reshape(len(nodes), num_samples)
 
+# Step 19 - SAGEConv
+class SAGEConv(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
+
+        # Linear transformation for the target node's own features.
+        self.lin_self = nn.Linear(in_dim, out_dim)
+
+        # Linear transformation for the aggregated neighbour features.
+        # The neighbour transformation has no bias.
+        self.lin_neigh = nn.Linear(
+            in_dim,
+            out_dim,
+            bias=False,
+        )
+
+    def forward(self, x_self, x_neigh, activate=True):
+        # Mean aggregation over the sampled neighbours.
+        neigh_mean = x_neigh.mean(dim=1)
+
+        # Combine transformed self features and neighbour features.
+        h = self.lin_self(x_self) + self.lin_neigh(neigh_mean)
+
+        # Apply ReLU when requested.
+        if activate:
+            h = F.relu(h)
+
+        # Normalize each output row to unit L2 norm.
+        return F.normalize(h, p=2, dim=1)
+
