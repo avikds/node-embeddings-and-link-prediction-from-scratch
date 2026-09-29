@@ -1315,3 +1315,82 @@ def inductive_evaluation(
         "n_test_edges": test_pos.shape[1],
     }
 
+# Step 23 - synthetic_kg
+def synthetic_kg(n_entities, n_relations, dim, seed, radius=0.35):
+    # Use a single generator for both entity positions and relation offsets.
+    g = torch.Generator().manual_seed(seed)
+
+    # Entity positions in [-1, 1].
+    positions = torch.rand(
+        n_entities,
+        dim,
+        generator=g,
+    ) * 2.0 - 1.0
+
+    # Relation translation vectors in [-0.6, 0.6].
+    offsets = (
+        torch.rand(
+            n_relations,
+            dim,
+            generator=g,
+        ) * 2.0 - 1.0
+    ) * 0.6
+
+    triples = []
+
+    # Construct triples in the required relation-then-head order.
+    for r in range(n_relations):
+        # Target position after applying the relation offset.
+        targets = positions + offsets[r]
+
+        # Euclidean distance from each translated head position
+        # to every entity position.
+        distances = torch.cdist(
+            targets,
+            positions,
+            p=2,
+        )
+
+        # Nearest entity for every head.
+        nearest_entities = distances.argmin(dim=1)
+
+        for h in range(n_entities):
+            t = int(nearest_entities[h])
+
+            # Record only non-self triples whose nearest-entity
+            # distance is within the requested radius.
+            if t != h and float(distances[h, t]) < radius:
+                triples.append((h, r, t))
+
+    if not triples:
+        return torch.empty(
+            (0, 3),
+            dtype=torch.long,
+        )
+
+    return torch.tensor(
+        triples,
+        dtype=torch.long,
+    )
+
+
+def split_triples(triples, test_frac, seed):
+    m = triples.shape[0]
+
+    # Shuffle the row indices under the requested seed.
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(
+        m,
+        generator=g,
+    )
+
+    num_test = round(test_frac * m)
+
+    shuffled = triples[perm]
+
+    # The shuffled rows are partitioned into test and train sets.
+    test = shuffled[:num_test]
+    train = shuffled[num_test:]
+
+    return train, test
+

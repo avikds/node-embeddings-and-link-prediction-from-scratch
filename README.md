@@ -32,6 +32,7 @@ python scaffold.py
 - [x] **20.** GraphSAGE
 - [x] **21.** train_sage_link_predictor
 - [x] **22.** inductive_evaluation
+- [x] **23.** synthetic_kg
 
 ---
 
