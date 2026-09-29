@@ -29,6 +29,7 @@ python scaffold.py
 - [x] **17.** leakage_experiment
 - [x] **18.** sample_neighbors
 - [x] **19.** SAGEConv
+- [x] **20.** GraphSAGE
 
 ---
 

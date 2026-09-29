@@ -900,3 +900,110 @@ class SAGEConv(nn.Module):
         # Normalize each output row to unit L2 norm.
         return F.normalize(h, p=2, dim=1)
 
+# Step 20 - GraphSAGE
+class GraphSAGE(nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, seed=0):
+        super().__init__()
+
+        # Make parameter initialization deterministic.
+        torch.manual_seed(seed)
+
+        self.conv1 = SAGEConv(in_dim, hidden_dim)
+        self.conv2 = SAGEConv(hidden_dim, out_dim)
+
+    def forward(self, x, adj, nodes, num_samples, rng):
+        s1, s2 = num_samples
+        batch_size = nodes.numel()
+
+        # Sample first-hop neighbours for every target node.
+        # Shape: (B, s1)
+        hop1_nodes = sample_neighbors(
+            adj,
+            nodes,
+            s1,
+            rng,
+        )
+
+        # Flatten first-hop nodes so that each sampled neighbour
+        # can independently receive its own second-hop samples.
+        hop1_flat = hop1_nodes.reshape(-1)
+
+        # Sample second-hop neighbours for every first-hop node.
+        # Shape: (B * s1, s2)
+        hop2_nodes = sample_neighbors(
+            adj,
+            hop1_flat,
+            s2,
+            rng,
+        )
+
+        # First GraphSAGE layer for the target nodes.
+        x_self = x[nodes]
+        x_neigh = x[hop1_nodes]
+
+        h_target = self.conv1(
+            x_self,
+            x_neigh,
+        )
+
+        # First GraphSAGE layer for every first-hop node.
+        x_hop1_self = x[hop1_flat]
+        x_hop1_neigh = x[hop2_nodes]
+
+        h_hop1 = self.conv1(
+            x_hop1_self,
+            x_hop1_neigh,
+        )
+
+        # Restore the (B, s1, hidden_dim) structure of the
+        # first-hop representations.
+        h_hop1 = h_hop1.reshape(
+            batch_size,
+            s1,
+            -1,
+        )
+
+        # Second GraphSAGE layer for the target nodes.
+        # The second layer has no activation.
+        h_target = self.conv2(
+            h_target,
+            h_hop1,
+            activate=False,
+        )
+
+        return h_target
+
+
+def sage_embed_all(model, x, adj, num_samples, rng, batch_size=256):
+    n = x.shape[0]
+    embeddings = []
+
+    # Evaluation does not require gradients.
+    with torch.no_grad():
+        for start in range(0, n, batch_size):
+            nodes = torch.arange(
+                start,
+                min(start + batch_size, n),
+                dtype=torch.long,
+            )
+
+            batch_embeddings = model(
+                x,
+                adj,
+                nodes,
+                num_samples,
+                rng,
+            )
+
+            embeddings.append(batch_embeddings)
+
+    # Concatenate all node batches into one (n, out_dim) matrix.
+    if not embeddings:
+        return torch.empty(
+            (0, model.conv2.lin_self.out_features),
+            dtype=x.dtype,
+            device=x.device,
+        )
+
+    return torch.cat(embeddings, dim=0)
+
