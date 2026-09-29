@@ -26,6 +26,7 @@ python scaffold.py
 - [x] **14.** link_bce_loss
 - [x] **15.** evaluate_link_prediction
 - [x] **16.** embedding_link_prediction
+- [x] **17.** leakage_experiment
 
 ---
 

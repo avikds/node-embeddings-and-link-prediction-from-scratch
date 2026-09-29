@@ -794,3 +794,53 @@ def embedding_link_prediction(
 
     return Z, metrics
 
+# Step 17 - leakage_experiment
+def leakage_experiment(sizes, p_in, p_out, seed, **kwargs):
+    # Build the synthetic stochastic block model.
+    edge_index, blocks = sbm_graph(
+        sizes,
+        p_in,
+        p_out,
+        seed=seed,
+    )
+
+    n = sum(sizes)
+
+    # Create the leakage-safe train/validation/test split.
+    split = edge_split(
+        edge_index,
+        n,
+        0.1,
+        0.2,
+        seed=seed,
+    )
+
+    # Honest experiment: the embedding pipeline sees only the
+    # training graph when generating random walks.
+    _, honest_metrics = embedding_link_prediction(
+        split,
+        seed=seed,
+        **kwargs,
+    )
+
+    # Create a separate split dictionary for the leakage experiment.
+    leaked_split = dict(split)
+
+    # Deliberately expose the full graph to the embedding pipeline,
+    # including validation and test edges. Evaluation remains unchanged.
+    leaked_split["train_edge_index"] = edge_index
+
+    # Leaked experiment: random walks can now traverse held-out edges.
+    _, leaked_metrics = embedding_link_prediction(
+        leaked_split,
+        seed=seed,
+        **kwargs,
+    )
+
+    return {
+        "honest_auc": honest_metrics["auc"],
+        "leaked_auc": leaked_metrics["auc"],
+        "honest_mrr": honest_metrics["mrr"],
+        "leaked_mrr": leaked_metrics["mrr"],
+    }
+
