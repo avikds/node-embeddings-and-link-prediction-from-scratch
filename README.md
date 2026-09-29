@@ -19,6 +19,7 @@ python scaffold.py
 - [x] **7.** node2vec_walks
 - [x] **8.** skipgram_pairs
 - [x] **9.** SkipGramModel
+- [x] **10.** train_skipgram
 
 ---
 

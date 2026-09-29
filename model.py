@@ -462,3 +462,60 @@ class SkipGramModel(nn.Module):
         # Return detached copies of the input embeddings used by the project.
         return self.in_embed.weight.detach().clone()
 
+# Step 10 - train_skipgram
+def train_skipgram(model, pairs, neg_probs, k, epochs, batch_size, lr, seed):
+    # Use one generator for both pair shuffling and negative sampling.
+    g = torch.Generator().manual_seed(seed)
+
+    # Adam optimizer with the requested learning rate.
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    num_pairs = pairs.shape[1]
+    epoch_losses = []
+
+    model.train()
+
+    for _ in range(epochs):
+        # Shuffle the pair columns using the seeded generator.
+        perm = torch.randperm(num_pairs, generator=g)
+
+        total_loss = 0.0
+        total_examples = 0
+
+        # Process shuffled pairs in consecutive batches.
+        for start in range(0, num_pairs, batch_size):
+            batch_indices = perm[start:start + batch_size]
+            batch_size_actual = batch_indices.numel()
+
+            batch = pairs[:, batch_indices]
+            center = batch[0]
+            context = batch[1]
+
+            # Sample k negatives for every positive pair.
+            negatives = sample_negatives(
+                neg_probs,
+                batch_size_actual,
+                k,
+                g,
+            )
+
+            optimizer.zero_grad()
+
+            loss = model(center, context, negatives)
+
+            loss.backward()
+            optimizer.step()
+
+            # Accumulate a batch-size-weighted loss so that the
+            # epoch mean is computed over individual training pairs.
+            total_loss += float(loss.detach()) * batch_size_actual
+            total_examples += batch_size_actual
+
+        # Guard against an empty pair set.
+        if total_examples == 0:
+            epoch_losses.append(0.0)
+        else:
+            epoch_losses.append(total_loss / total_examples)
+
+    return epoch_losses
+
