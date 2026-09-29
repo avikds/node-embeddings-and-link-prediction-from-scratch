@@ -211,7 +211,6 @@ def edge_split(edge_index, n, val_frac, test_frac, seed):
 # Step 5 - sample_negative_edges
 import random
 
-
 def sample_negative_edges(edge_index, n, num, seed, exclude=None):
     # Existing graph edges are stored as canonical undirected pairs.
     edge_set = undirected_edge_set(edge_index)
