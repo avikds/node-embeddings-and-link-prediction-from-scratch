@@ -1007,3 +1007,104 @@ def sage_embed_all(model, x, adj, num_samples, rng, batch_size=256):
 
     return torch.cat(embeddings, dim=0)
 
+# Step 21 - train_sage_link_predictor
+def train_sage_link_predictor(
+    model,
+    x,
+    split,
+    steps,
+    batch_size,
+    lr,
+    num_samples,
+    seed,
+):
+    # Build adjacency lists using only the training graph.
+    n = split["num_nodes"]
+    adj = build_adjacency_lists(
+        split["train_edge_index"],
+        n,
+    )
+
+    # Python RNG for GraphSAGE neighbour sampling.
+    rng = random.Random(seed)
+
+    # Torch generator for selecting training positive edges.
+    g = torch.Generator().manual_seed(seed)
+
+    # Adam optimizer.
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=lr,
+    )
+
+    train_pos = split["train_pos"]
+    m_train = train_pos.shape[1]
+
+    losses = []
+
+    model.train()
+
+    for step in range(steps):
+        # Randomly select training positive edges with replacement.
+        indices = torch.randint(
+            0,
+            m_train,
+            (batch_size,),
+            generator=g,
+        )
+
+        pos = train_pos[:, indices]
+
+        # Sample an equal number of negative edges from the
+        # training graph using a fresh deterministic seed per step.
+        neg = sample_negative_edges(
+            split["train_edge_index"],
+            n,
+            batch_size,
+            seed * 1000 + step,
+        )
+
+        # Concatenate all four endpoint groups so all required node
+        # embeddings are computed in a single GraphSAGE forward pass.
+        nodes = torch.cat(
+            [
+                pos[0],
+                pos[1],
+                neg[0],
+                neg[1],
+            ],
+            dim=0,
+        )
+
+        embeddings = model(
+            x,
+            adj,
+            nodes,
+            num_samples,
+            rng,
+        )
+
+        # Split the embeddings back into the four endpoint groups.
+        pos_u = embeddings[:batch_size]
+        pos_v = embeddings[batch_size:2 * batch_size]
+        neg_u = embeddings[2 * batch_size:3 * batch_size]
+        neg_v = embeddings[3 * batch_size:]
+
+        # Dot-product scores for positive and negative edges.
+        pos_scores = (pos_u * pos_v).sum(dim=1)
+        neg_scores = (neg_u * neg_v).sum(dim=1)
+
+        # Binary cross-entropy with logits.
+        loss = link_bce_loss(
+            pos_scores,
+            neg_scores,
+        )
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        losses.append(float(loss.detach()))
+
+    return losses
+

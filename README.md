@@ -30,6 +30,7 @@ python scaffold.py
 - [x] **18.** sample_neighbors
 - [x] **19.** SAGEConv
 - [x] **20.** GraphSAGE
+- [x] **21.** train_sage_link_predictor
 
 ---
 
